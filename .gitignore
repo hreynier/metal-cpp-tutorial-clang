@@ -1,0 +1,46 @@
+## Don't store build files, keep folder for easy set-up
+build/*
+
+## Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+*.app/
+
+## CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.cmake
+
+## IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+compile_commands.json
+
+## Xcode
+*.xcodeproj/
+*.xcworkspace/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+
+## Temporary files
+*.tmp
+*.temp
+*.log
+
+## Metal compiled shaders
+*.metallib
+*.air
+
+## Clangd
+.cache/clangd/index
