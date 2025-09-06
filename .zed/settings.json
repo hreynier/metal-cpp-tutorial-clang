@@ -1,0 +1,24 @@
+{
+  "lsp": {
+    "clangd": {
+      "binary": {
+        "path": "clangd",
+        "arguments": [
+          "--function-arg-placeholders=0",
+          "--compile-commands-dir=build",
+          "--clang-tidy",
+          "--completion-style=detailed",
+          "--header-insertion=iwyu",
+          "--suggest-missing-includes"
+        ]
+      }
+    }
+  },
+  "file_types": {
+    "Metal": ["metal"]
+  },
+  "auto_install_extensions": {
+    "cmake": true
+  },
+  "format_on_save": "on"
+}

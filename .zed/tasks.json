@@ -1,0 +1,131 @@
+[
+  {
+    "label": "CMake configure Debug",
+    "command": "cmake",
+    "args": ["-DCMAKE_BUILD_TYPE=Debug", "-B", "build/"],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "CMake configure Release",
+    "command": "cmake",
+    "args": ["-DCMAKE_BUILD_TYPE=Release", "-B", "build/"],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "CMake build",
+    "command": "cmake",
+    "args": ["--build", "build", "--verbose"],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "CMake configure Debug and build",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake -DCMAKE_BUILD_TYPE=Debug -B build/ && cmake --build build/ --verbose"
+    ],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "CMake configure Release and build",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake -DCMAKE_BUILD_TYPE=Release -B build/ && cmake --build build/ --verbose"
+    ],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Build and Run",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake --build build/ --verbose && ./build/minimal-metal-cpp"
+    ],
+    "env": {},
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Clean Build",
+    "command": "rm",
+    "args": ["-rf", "build/*"],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Clean and Rebuild",
+    "command": "sh",
+    "args": [
+      "-c",
+      "rm -rf build/* && cmake -B build/ && cmake --build build/ --verbose"
+    ],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Run Application",
+    "command": "./build/minimal-metal-cpp",
+    "args": [],
+    "env": {},
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Generate Compile Commands",
+    "command": "cmake",
+    "args": ["-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-B", "build/"],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Build Script - Build",
+    "command": "./build.sh",
+    "args": [],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Build Script - Clean",
+    "command": "./build.sh",
+    "args": ["clean"],
+    "env": {},
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Build Script - Run",
+    "command": "./build.sh",
+    "args": ["run"],
+    "env": {},
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  }
+]
