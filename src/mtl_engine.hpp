@@ -35,9 +35,15 @@ private:
   void createSquare();
   void createTriangle();
   void createCube();
+  void createBuffers();
   void createDefaultLibrary();
   void createCommandQueue();
   void createRenderPipeline();
+  void createDepthAndMSAATextures();
+  void createRenderPassDescriptor();
+
+  // Upon resizing, update depth and MSAA
+  void updateRenderPassDescriptor();
 
   void encodeRenderCommand(MTL::RenderCommandEncoder *renderEncoder);
   void sendRenderCommand();
@@ -53,6 +59,13 @@ private:
   MTL::CommandQueue *metalCommandQueue;
   MTL::CommandBuffer *metalCommandBuffer;
   MTL::RenderPipelineState *metalRenderPS0;
+
+  MTL::DepthStencilState *depthStencilState;
+  MTL::RenderPassDescriptor *renderPassDescriptor;
+  MTL::Texture *msaaRenderTargetTexture = nullptr;
+  int sampleCount = 4;
+  MTL::Texture *depthTexture;
+
   MTL::Buffer *squareVertexBuffer;
   MTL::Buffer *triangleVertexBuffer;
   MTL::Buffer *cubeVertexBuffer;

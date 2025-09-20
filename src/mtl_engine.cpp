@@ -3,7 +3,9 @@
 #include "Foundation/NSString.hpp"
 #include "GLFW/glfw3.h"
 #include "GLFW/glfw3native.h"
+#include "Metal/MTLDepthStencil.hpp"
 #include "Metal/MTLDevice.hpp"
+#include "Metal/MTLPixelFormat.hpp"
 #include "Metal/MTLRenderPipeline.hpp"
 #include "Metal/MTLResource.hpp"
 #include "vertex_data.hpp"
@@ -18,9 +20,12 @@ void MTLEngine::init() {
   // createTriangle();
   // createSquare();
   createCube();
+  createBuffers();
   createDefaultLibrary();
   createCommandQueue();
   createRenderPipeline();
+  createDepthAndMSAATextures();
+  createRenderPassDescriptor();
 };
 
 void MTLEngine::run() {
@@ -35,6 +40,10 @@ void MTLEngine::run() {
 
 void MTLEngine::cleanup() {
   glfwTerminate();
+  transformationBuffer->release();
+  msaaRenderTargetTexture->release();
+  depthTexture->release();
+  renderPassDescriptor->release();
   metalDevice->release();
 };
 
@@ -48,6 +57,19 @@ void MTLEngine::frameBufferSizeCallback(GLFWwindow *window, int width,
 
 void MTLEngine::resizeFrameBuffer(int width, int height) {
   metalLayer->setDrawableSize(CGSizeMake(width, height));
+
+  // Deallocate created textures
+  if (msaaRenderTargetTexture) {
+    msaaRenderTargetTexture->release();
+    msaaRenderTargetTexture = nullptr;
+  }
+  if (depthTexture) {
+    depthTexture->release();
+    depthTexture = nullptr;
+  }
+  createDepthAndMSAATextures();
+  metalDrawable = metalLayer->nextDrawable();
+  updateRenderPassDescriptor();
 };
 
 void MTLEngine::initWindow() {
@@ -72,6 +94,7 @@ void MTLEngine::initWindow() {
   NS::View *nsview = metalWindow->contentView();
   nsview->setLayer(metalLayer);
   nsview->setWantsLayer(true);
+  metalDrawable = metalLayer->nextDrawable();
 };
 
 // std::string MTLEngine::readFile(const std::string &filename) {
@@ -170,10 +193,13 @@ void MTLEngine::createCube() {
 
   cubeVertexBuffer = metalDevice->newBuffer(&cubeVertices, sizeof(cubeVertices),
                                             MTL::ResourceStorageModeShared);
-  transformationBuffer = metalDevice->newBuffer(sizeof(TransformationData),
-                                                MTL::ResourceStorageModeShared);
 
   grassTexture = new Texture("assets/mc_grass.jpeg", metalDevice);
+}
+
+void MTLEngine::createBuffers() {
+  transformationBuffer = metalDevice->newBuffer(sizeof(TransformationData),
+                                                MTL::ResourceStorageModeShared);
 }
 
 void MTLEngine::createDefaultLibrary() {
@@ -222,29 +248,96 @@ void MTLEngine::createRenderPipeline() {
   MTL::PixelFormat pixelFormat = metalLayer->pixelFormat();
   renderPipelineDescriptor->colorAttachments()->object(0)->setPixelFormat(
       pixelFormat);
+  renderPipelineDescriptor->setSampleCount(sampleCount);
+  renderPipelineDescriptor->setDepthAttachmentPixelFormat(
+      MTL::PixelFormatDepth32Float);
 
   NS::Error *error;
   metalRenderPS0 =
       metalDevice->newRenderPipelineState(renderPipelineDescriptor, &error);
+
+  if (metalRenderPS0 == nil) {
+    std::cout << "Error creating render pipeline state: " << error << std::endl;
+    std::exit(0);
+  }
+
+  MTL::DepthStencilDescriptor *depthStencilDescriptor =
+      MTL::DepthStencilDescriptor::alloc()->init();
+  depthStencilDescriptor->setDepthCompareFunction(
+      MTL::CompareFunctionLessEqual);
+  depthStencilDescriptor->setDepthWriteEnabled(true);
+  depthStencilState = metalDevice->newDepthStencilState(depthStencilDescriptor);
+
   renderPipelineDescriptor->release();
+  // depthStencilDescriptor->release();
   vertexShader->release();
   fragmentShader->release();
 };
+
+void MTLEngine::createDepthAndMSAATextures() {
+  MTL::TextureDescriptor *msaaTextureDescriptor =
+      MTL::TextureDescriptor::alloc()->init();
+  CGSize drawableSize = metalLayer->drawableSize();
+
+  msaaTextureDescriptor->setTextureType(MTL::TextureType2DMultisample);
+  msaaTextureDescriptor->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+  msaaTextureDescriptor->setWidth(drawableSize.width);
+  msaaTextureDescriptor->setHeight(drawableSize.height);
+  msaaTextureDescriptor->setSampleCount(sampleCount);
+  msaaTextureDescriptor->setUsage(MTL::TextureUsageRenderTarget);
+
+  msaaRenderTargetTexture = metalDevice->newTexture(msaaTextureDescriptor);
+
+  MTL::TextureDescriptor *depthTextureDescriptor =
+      MTL::TextureDescriptor::alloc()->init();
+  depthTextureDescriptor->setTextureType(MTL::TextureType2DMultisample);
+  depthTextureDescriptor->setPixelFormat(MTL::PixelFormatDepth32Float);
+  depthTextureDescriptor->setWidth(drawableSize.width);
+  depthTextureDescriptor->setHeight(drawableSize.height);
+  depthTextureDescriptor->setUsage(MTL::TextureUsageRenderTarget);
+  depthTextureDescriptor->setSampleCount(sampleCount);
+
+  depthTexture = metalDevice->newTexture(depthTextureDescriptor);
+
+  msaaTextureDescriptor->release();
+  depthTextureDescriptor->release();
+}
+
+void MTLEngine::createRenderPassDescriptor() {
+  renderPassDescriptor = MTL::RenderPassDescriptor::alloc()->init();
+
+  MTL::RenderPassColorAttachmentDescriptor *colorAttachment =
+      renderPassDescriptor->colorAttachments()->object(0);
+  MTL::RenderPassDepthAttachmentDescriptor *depthAttachment =
+      renderPassDescriptor->depthAttachment();
+
+  colorAttachment->setTexture(msaaRenderTargetTexture);
+  colorAttachment->setResolveTexture(metalDrawable->texture());
+  colorAttachment->setLoadAction(MTL::LoadActionClear);
+  colorAttachment->setClearColor(
+      MTL::ClearColor(41.0f / 255.0f, 42.0f / 255.0f, 48.0f / 255.0f, 1.0));
+  colorAttachment->setStoreAction(MTL::StoreActionMultisampleResolve);
+
+  depthAttachment->setTexture(depthTexture);
+  depthAttachment->setLoadAction(MTL::LoadActionClear);
+  depthAttachment->setStoreAction(MTL::StoreActionDontCare);
+  depthAttachment->setClearDepth(1.0);
+}
+
+void MTLEngine::updateRenderPassDescriptor() {
+  renderPassDescriptor->colorAttachments()->object(0)->setTexture(
+      msaaRenderTargetTexture);
+  renderPassDescriptor->colorAttachments()->object(0)->setResolveTexture(
+      metalDrawable->texture());
+  renderPassDescriptor->depthAttachment()->setTexture(depthTexture);
+}
 
 void MTLEngine::draw() { sendRenderCommand(); };
 
 void MTLEngine::sendRenderCommand() {
   metalCommandBuffer = metalCommandQueue->commandBuffer();
 
-  MTL::RenderPassDescriptor *renderPassDescriptor =
-      MTL::RenderPassDescriptor::alloc()->init();
-  MTL::RenderPassColorAttachmentDescriptor *cd =
-      renderPassDescriptor->colorAttachments()->object(0);
-  cd->setTexture(metalDrawable->texture());
-  cd->setLoadAction(MTL::LoadActionClear);
-  cd->setClearColor(
-      MTL::ClearColor(41.0f / 255.0f, 42.0f / 255.0f, 48.0f / 255.0f, 1.0f));
-  cd->setStoreAction(MTL::StoreActionStore);
+  updateRenderPassDescriptor();
 
   MTL::RenderCommandEncoder *renderCommandEncoder =
       metalCommandBuffer->renderCommandEncoder(renderPassDescriptor);
@@ -254,8 +347,6 @@ void MTLEngine::sendRenderCommand() {
   metalCommandBuffer->presentDrawable(metalDrawable);
   metalCommandBuffer->commit();
   metalCommandBuffer->waitUntilCompleted();
-
-  renderPassDescriptor->release();
 };
 
 // Define the modal, view, perspective projection's here in the render command
@@ -300,6 +391,7 @@ void MTLEngine::encodeRenderCommand(
          sizeof(transformationData));
 
   renderCommandEncoder->setRenderPipelineState(metalRenderPS0);
+  renderCommandEncoder->setDepthStencilState(depthStencilState);
   renderCommandEncoder->setVertexBuffer(cubeVertexBuffer, 0, 0);
   renderCommandEncoder->setVertexBuffer(transformationBuffer, 0, 1);
   MTL::PrimitiveType typeTriangle = MTL::PrimitiveTypeTriangle;
