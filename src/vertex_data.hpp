@@ -15,3 +15,10 @@ struct VertexData {
   // And texture coordinate as float2
   simd::float2 textureCoordinate;
 };
+
+//
+struct TransformationData {
+  simd::float4x4 modelMatrix;
+  simd::float4x4 viewMatrix;
+  simd::float4x4 perspectiveMatrix;
+};
