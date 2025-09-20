@@ -10,6 +10,7 @@
 #include "vertex_data.hpp"
 #include <stb/stb_image.h>
 
+#include <AAPLMathUtilities.h>
 #include <AppKit/AppKit.hpp>
 #include <Metal/Metal.hpp>
 #include <QuartzCore/CAMetalLayer.hpp>
@@ -33,6 +34,7 @@ private:
 
   void createSquare();
   void createTriangle();
+  void createCube();
   void createDefaultLibrary();
   void createCommandQueue();
   void createRenderPipeline();
@@ -53,6 +55,8 @@ private:
   MTL::RenderPipelineState *metalRenderPS0;
   MTL::Buffer *squareVertexBuffer;
   MTL::Buffer *triangleVertexBuffer;
+  MTL::Buffer *cubeVertexBuffer;
+  MTL::Buffer *transformationBuffer;
 
   Texture *grassTexture;
 };
