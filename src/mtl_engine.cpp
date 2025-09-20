@@ -6,6 +6,7 @@
 #include "Metal/MTLDepthStencil.hpp"
 #include "Metal/MTLDevice.hpp"
 #include "Metal/MTLPixelFormat.hpp"
+#include "Metal/MTLRenderCommandEncoder.hpp"
 #include "Metal/MTLRenderPipeline.hpp"
 #include "Metal/MTLResource.hpp"
 #include "vertex_data.hpp"
@@ -390,6 +391,8 @@ void MTLEngine::encodeRenderCommand(
   memcpy(transformationBuffer->contents(), &transformationData,
          sizeof(transformationData));
 
+  // Uncomment to show the wireframe of the object we are rendering
+  // renderCommandEncoder->setTriangleFillMode(MTL::TriangleFillModeLines);
   renderCommandEncoder->setRenderPipelineState(metalRenderPS0);
   renderCommandEncoder->setDepthStencilState(depthStencilState);
   renderCommandEncoder->setVertexBuffer(cubeVertexBuffer, 0, 0);
