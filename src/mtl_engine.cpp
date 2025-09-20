@@ -391,6 +391,10 @@ void MTLEngine::encodeRenderCommand(
   memcpy(transformationBuffer->contents(), &transformationData,
          sizeof(transformationData));
 
+  // Tell what winding mode we are using and instruct metal to cull faces we
+  // can't see
+  renderCommandEncoder->setFrontFacingWinding(MTL::WindingCounterClockwise);
+  renderCommandEncoder->setCullMode(MTL::CullModeBack);
   // Uncomment to show the wireframe of the object we are rendering
   // renderCommandEncoder->setTriangleFillMode(MTL::TriangleFillModeLines);
   renderCommandEncoder->setRenderPipelineState(metalRenderPS0);
