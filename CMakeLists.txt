@@ -112,6 +112,13 @@ target_include_directories(minimal-metal-cpp
     dependencies/metal-cpp-extensions
     # STB Image loading library for loading textures
     dependencies/stb
+    # AAPLMathUtilities
+    dependencies/AAPLMathUtilities
+)
+
+target_sources(minimal-metal-cpp
+    PRIVATE
+    dependencies/AAPLMathUtilities/AAPLMathUtilities.cpp
 )
 
 # Link dependencies
