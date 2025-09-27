@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
+#include <simd/simd.h>
 
 #include "vertex_data.hpp"
 
@@ -18,6 +19,10 @@ struct VertexOut {
   // and then passes the interpolated value to the fragment shader for each
   // fragment in the triangle.
   float2 textureCoordinate;
+
+  float3 normal;
+  // Position in worldspace
+  float4 fragmentPosition;
 };
 
 // Input to our new vertexShader is our vertexData, which is defined
@@ -27,8 +32,21 @@ vertex VertexOut cubeVertexShader(uint vertexID [[vertex_id]],
                                     constant VertexData *vertexData,
                                     constant TransformationData* transformationData) {
   VertexOut out;
-  out.position = transformationData->perspectiveMatrix * transformationData->viewMatrix*transformationData->modelMatrix * vertexData[vertexID].position;
+  // Calculate worldspace position
+  float4 worldPosition = transformationData -> modelMatrix * vertexData[vertexID].position;
+
+  // Final clip position
+  out.position = transformationData->perspectiveMatrix *
+                 transformationData->viewMatrix *
+                 worldPosition;
+
   out.textureCoordinate = vertexData[vertexID].textureCoordinate;
+
+  // Transform normal to world space
+  out.normal = (transformationData -> modelMatrix * float4(vertexData[vertexID].normal, 0.0)).xyz;
+
+  // Pass world space position to fragment shader for lighting calcs
+  out.fragmentPosition = worldPosition;
   return out;
 };
 
@@ -44,17 +62,44 @@ fragment float4 cubeFragmentShader(VertexOut in [[stage_in]],
                                      texture2d<float> colorTexture
                                      [[texture(0)]]) {
 
-  // We are setting the linear filtering for magnification and minifcation.
-  // Mag = When a texture is displayed at a larger size than the original
-  // texture Min = When a texture is displayed at a smaller size than the
-  // original texture In each case, we are telling the shader to interpolate
-  // between color values to create a smooth transition rather than a blocky
-  // one.
-  //
+    // Camera at default position - slightly back and up to see the scene
+    const float4 cameraPosition = float4(0.0, 0.0, 5.0, 1.0);
 
-  constexpr sampler textureSampler(mag_filter::linear, min_filter::linear);
-  // Sample texture to obtain color
-  const float4 colorSample =
-      colorTexture.sample(textureSampler, in.textureCoordinate);
-  return colorSample;
+    // Warm Light
+    const float4 lightColor = float4(0.7, 0.67, 0.56, 1.0);
+
+    // Light positioned above and to the front-right for good illumination
+    const float4 lightPosition = float4(2.0, 3.0, 4.0, 1.0);
+
+    // We are setting the linear filtering for magnification and minifcation.
+    // Mag = When a texture is displayed at a larger size than the original
+    // texture Min = When a texture is displayed at a smaller size than the
+    // original texture In each case, we are telling the shader to interpolate
+    // between color values to create a smooth transition rather than a blocky
+    // one.
+
+    constexpr sampler textureSampler(mag_filter::linear, min_filter::linear);
+    // Sample texture to obtain color
+    const float4 colorSample =
+        colorTexture.sample(textureSampler, in.textureCoordinate);
+
+    // Ambient
+    float ambientStrength = 0.4f;
+    float4 ambient = ambientStrength * lightColor;
+
+    // Diffuse
+    float3 norm = simd::normalize(in.normal.xyz);
+    float4 lightDir = simd::normalize(lightPosition - in.fragmentPosition);
+    float diff = simd::max(simd::dot(norm, lightPosition.xyz), 0.0);
+    float4 diffuse = diff * lightColor;
+
+    // Specular
+    float specStrength = 0.5f;
+    float4 viewDir = simd::normalize(cameraPosition - in.fragmentPosition);
+    float4 reflectDir = simd::reflect(-lightDir, float4(norm, 1));
+    float spec = simd::pow(simd::max(simd::dot(viewDir, reflectDir), 0.0), 16);
+    float4 specular = specStrength * spec * lightColor;
+
+    float4 finalCol = (ambient + diffuse + specular) * colorSample;
+    return finalCol;
 };
