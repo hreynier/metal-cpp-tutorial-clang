@@ -96,9 +96,12 @@ fragment float4 cubeFragmentShader(VertexOut in [[stage_in]],
     // Specular
     float specStrength = 1.0f;
     float4 viewDir = simd::normalize(cameraPosition - in.fragmentPosition);
-    float4 reflectDir = simd::reflect(-lightDir, float4(norm, 1));
-    float spec = simd::pow(simd::max(simd::dot(viewDir, reflectDir), 0.0), 16);
-    float4 specular = specStrength * spec * lightColor;
+    // For Blinn-Phong, we compute the halfway vector with a matrix addition function
+    // rather than the reflection vector with a matrix dot multiplication.
+    // This is computationally more efficient and also produces more realistic lighting in certain scenarios.
+    float4 halfway = simd::normalize(lightDir + viewDir);
+    float specularIntensity = simd::pow(simd::max(simd::dot(float4(norm, 1.0), halfway), 0.0), 32);
+    float4 specular = specStrength * specularIntensity * lightColor;
 
     float4 finalCol = (ambient + diffuse + specular) * colorSample;
     return finalCol;
