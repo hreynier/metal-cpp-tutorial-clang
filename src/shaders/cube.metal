@@ -66,7 +66,7 @@ fragment float4 cubeFragmentShader(VertexOut in [[stage_in]],
     const float4 cameraPosition = float4(0.0, 0.0, 5.0, 1.0);
 
     // Warm Light
-    const float4 lightColor = float4(0.7, 0.67, 0.56, 1.0);
+    const float4 lightColor = float4(1.0, 0.95, 0.8, 1.0);
 
     // Light positioned above and to the front-right for good illumination
     const float4 lightPosition = float4(2.0, 3.0, 4.0, 1.0);
@@ -94,7 +94,7 @@ fragment float4 cubeFragmentShader(VertexOut in [[stage_in]],
     float4 diffuse = diff * lightColor;
 
     // Specular
-    float specStrength = 0.5f;
+    float specStrength = 1.0f;
     float4 viewDir = simd::normalize(cameraPosition - in.fragmentPosition);
     float4 reflectDir = simd::reflect(-lightDir, float4(norm, 1));
     float spec = simd::pow(simd::max(simd::dot(viewDir, reflectDir), 0.0), 16);
