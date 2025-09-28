@@ -90,7 +90,7 @@ fragment float4 cubeFragmentShader(VertexOut in [[stage_in]],
     // Diffuse
     float3 norm = simd::normalize(in.normal.xyz);
     float4 lightDir = simd::normalize(lightPosition - in.fragmentPosition);
-    float diff = simd::max(simd::dot(norm, lightPosition.xyz), 0.0);
+    float diff = simd::max(simd::dot(norm, lightDir.xyz), 0.0);
     float4 diffuse = diff * lightColor;
 
     // Specular
