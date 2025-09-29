@@ -2,13 +2,21 @@
 
 Texture::Texture(const char *filepath, MTL::Device *metalDevice) {
   device = metalDevice;
-
+  char cwd[1024];
+  getcwd(cwd, sizeof(cwd));
+  printf("Current working directory: %s\n", cwd);
+  printf("Trying to load texture: %s\n", filepath);
   // Metal expects 0 coordinate to be on the bottom of image rather than top
   stbi_set_flip_vertically_on_load(true);
 
   // Load image, asset that it's not null
   unsigned char *image =
       stbi_load(filepath, &width, &height, &channels, STBI_rgb_alpha);
+
+  if (image == NULL) {
+    printf("Failed to load image: %s\n", stbi_failure_reason());
+    printf("Full path attempted: %s/%s\n", cwd, filepath);
+  }
   assert(image != NULL);
 
   // Create a texture descriptor that specifies texture properties

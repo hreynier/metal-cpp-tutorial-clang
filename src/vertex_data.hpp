@@ -15,7 +15,7 @@ struct VertexData {
   // And texture coordinate as float2
   simd::float2 textureCoordinate;
   // Normal matrix
-  simd::float3 normal;
+  simd::float4 normal;
 };
 
 //

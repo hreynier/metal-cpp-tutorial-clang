@@ -20,11 +20,14 @@ void MTLEngine::init() {
 
   // createTriangle();
   // createSquare();
-  createCube();
+  // createCube();
+  createSphere();
+  createLight();
   createBuffers();
   createDefaultLibrary();
   createCommandQueue();
   createRenderPipeline();
+  createLightSourceRenderPipeline();
   createDepthAndMSAATextures();
   createRenderPassDescriptor();
 };
@@ -41,7 +44,8 @@ void MTLEngine::run() {
 
 void MTLEngine::cleanup() {
   glfwTerminate();
-  transformationBuffer->release();
+  sphereTransformationBuffer->release();
+  lightTransformationBuffer->release();
   msaaRenderTargetTexture->release();
   depthTexture->release();
   renderPassDescriptor->release();
@@ -98,109 +102,223 @@ void MTLEngine::initWindow() {
   metalDrawable = metalLayer->nextDrawable();
 };
 
-// std::string MTLEngine::readFile(const std::string &filename) {
-//   std::ifstream file(filename);
-//   if (!file.is_open()) {
-//     throw std::runtime_error("Could not open file: " + filename);
-//   }
-//   return std::string((std::istreambuf_iterator<char>(file)),
-//                      std::istreambuf_iterator<char>());
-// };
+void MTLEngine::createSphere(int numLat, int numLong) {
+  // To create a sphere, we need to compose it of squares
+  std::vector<VertexData> vertices;
+  const float PI = 3.14159265359f;
 
-void MTLEngine::createSquare() {
-  // We have six vertices to define the square
-  // This is because our square is made up of two triangles, sharing two
-  // vertices at the corners.
-  VertexData squareVertices[] = {
-      {{-0.5, -0.5, 0.5, 1.0f}, {0.0f, 0.0f}},
-      {{-0.5, 0.5, 0.5, 1.0f}, {0.0f, 1.0f}},
-      {{0.5, 0.5, 0.5, 1.0f}, {1.0f, 1.0f}},
-      {{-0.5, -0.5, 0.5, 1.0f}, {0.0f, 0.0f}},
-      {{0.5, 0.5, 0.5, 1.0f}, {1.0f, 1.0f}},
-      {{0.5, -0.5, 0.5, 1.0f}, {1.0f, 0.0f}},
-  };
+  // For each lat/lon we need to create a square
+  for (int lat = 0; lat < numLat; lat++) {
+    for (int lon = 0; lon < numLong; lon++) {
+      // Corners of square
+      std::array<simd::float4, 4> squareVertices;
+      std::array<simd::float4, 4> normals;
+      std::array<simd::float2, 4> texCoords;
 
-  // Create a buffer for the vertices, defining the size in memory for the GPU
-  squareVertexBuffer = metalDevice->newBuffer(
-      &squareVertices, sizeof(squareVertices), MTL::ResourceStorageModeShared);
+      for (int i = 0; i < 4; i++) {
+        float theta = (lat + (i / 2)) * PI / numLat;    // 0 to Pi
+        float phi = (lon + (i % 2)) * 2 * PI / numLong; // 0 to 2 Pi
+        float sinTheta = sinf(theta);
+        float cosTheta = cosf(theta);
+        float sinPhi = sinf(phi);
+        float cosPhi = cosf(phi);
 
-  // Create a grass texture object, pointing to relative file location
-  grassTexture = new Texture("assets/mc_grass.jpeg", metalDevice);
-};
+        squareVertices[i] = {cosPhi * sinTheta, cosTheta, sinPhi * sinTheta,
+                             1.0f};
+        // Normal of the vertex is same as its position on a unit sphere.
+        normals[i] = simd::normalize(squareVertices[i]);
 
-void MTLEngine::createTriangle() {
-  simd::float3 triangleVertices[] = {
-      {-0.5f, -0.5f, 0.0f}, {0.5f, -0.5f, 0.0f}, {0.0f, 0.5f, 0.0f}};
+        // Texture coordinate in spherical coordinates
+        float u = phi / (2 * PI);
+        float v = theta / PI;
+        texCoords[i] = {u, v};
+      }
 
-  triangleVertexBuffer =
-      metalDevice->newBuffer(&triangleVertices, sizeof(triangleVertices),
-                             MTL::ResourceStorageModeShared);
-};
+      // Create two triangles to form the square in counter clockwise winding
+      // order
+      // First Triangle
+      vertices.push_back(
+          VertexData{squareVertices[0], texCoords[0], normals[0]});
+      vertices.push_back(
+          VertexData{squareVertices[1], texCoords[1], normals[1]});
+      vertices.push_back(
+          VertexData{squareVertices[2], texCoords[2], normals[2]});
+      // Second Triangle
+      vertices.push_back(
+          VertexData{squareVertices[1], texCoords[1], normals[1]});
+      vertices.push_back(
+          VertexData{squareVertices[3], texCoords[3], normals[3]});
+      vertices.push_back(
+          VertexData{squareVertices[2], texCoords[2], normals[2]});
+    }
+  }
+  sphereVertexBuffer = metalDevice->newBuffer(
+      vertices.data(), sizeof(VertexData) * vertices.size(),
+      MTL::ResourceStorageModeShared);
 
-// Function to create a cube, building up from a list of vertices for each face
-// etc
-void MTLEngine::createCube() {
-  // Cube for use in a right-handed coordinate system with triangle faces
-  // specified in Counter-Clockwise winding order
-  VertexData cubeVertices[] = {
-      // Front face (normal: 0, 0, 1)
-      {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0}},
-      {{0.5, -0.5, 0.5, 1.0}, {1.0, 0.0}, {0.0, 0.0, 1.0}},
-      {{0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, 1.0}},
-      {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0}},
-      {{0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, 1.0}},
-      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 1.0}, {0.0, 0.0, 1.0}},
-
-      // Back face (normal: 0, 0, -1)
-      {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0}},
-      {{-0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}, {0.0, 0.0, -1.0}},
-      {{-0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, -1.0}},
-      {{-0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, -1.0}},
-      {{0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}, {0.0, 0.0, -1.0}},
-      {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0}},
-
-      // Top face (normal: 0, 1, 0)
-      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0}},
-      {{0.5, 0.5, 0.5, 1.0}, {1.0, 0.0}, {0.0, 1.0, 0.0}},
-      {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 1.0, 0.0}},
-      {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 1.0, 0.0}},
-      {{-0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}, {0.0, 1.0, 0.0}},
-      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0}},
-
-      // Bottom face (normal: 0, -1, 0)
-      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0}},
-      {{0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}, {0.0, -1.0, 0.0}},
-      {{0.5, -0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, -1.0, 0.0}},
-      {{0.5, -0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, -1.0, 0.0}},
-      {{-0.5, -0.5, 0.5, 1.0}, {0.0, 1.0}, {0.0, -1.0, 0.0}},
-      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0}},
-
-      // Left face (normal: -1, 0, 0)
-      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0}},
-      {{-0.5, -0.5, 0.5, 1.0}, {1.0, 0.0}, {-1.0, 0.0, 0.0}},
-      {{-0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {-1.0, 0.0, 0.0}},
-      {{-0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {-1.0, 0.0, 0.0}},
-      {{-0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}, {-1.0, 0.0, 0.0}},
-      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0}},
-
-      // Right face (normal: 1, 0, 0)
-      {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0}},
-      {{0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}, {1.0, 0.0, 0.0}},
-      {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {1.0, 0.0, 0.0}},
-      {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {1.0, 0.0, 0.0}},
-      {{0.5, 0.5, 0.5, 1.0}, {0.0, 1.0}, {1.0, 0.0, 0.0}},
-      {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0}},
-  };
-
-  cubeVertexBuffer = metalDevice->newBuffer(&cubeVertices, sizeof(cubeVertices),
-                                            MTL::ResourceStorageModeShared);
-
-  grassTexture = new Texture("assets/mc_grass.jpeg", metalDevice);
+  vertexCount = vertices.size();
+  marsTexture = new Texture("assets/mars_texture.jpg", metalDevice);
 }
 
+void MTLEngine::createLight() {
+  // Cube for use in right-handed coord system with triangle faces
+  // specified with counter-clockwise winding order
+  VertexData lightSource[] = {
+      // Front face (normal: 0, 0, 1)
+      {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0, 1.0}},
+      {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0, 1.0}},
+      {{0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0, 1.0}},
+      {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0, 1.0}},
+      {{0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0, 1.0}},
+      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0, 1.0}},
+
+      // Back face (normal: 0, 0, -1)
+      {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0, 1.0}},
+      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0, 1.0}},
+      {{-0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0, 1.0}},
+      {{-0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0, 1.0}},
+      {{0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0, 1.0}},
+      {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0, 1.0}},
+
+      // Top face (normal: 0, 1, 0)
+      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0, 1.0}},
+      {{0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0, 1.0}},
+      {{0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0, 1.0}},
+      {{0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0, 1.0}},
+      {{-0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0, 1.0}},
+      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0, 1.0}},
+
+      // Bottom face (normal: 0, -1, 0)
+      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0, 1.0}},
+      {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0, 1.0}},
+      {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0, 1.0}},
+      {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0, 1.0}},
+      {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0, 1.0}},
+      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0, 1.0}},
+
+      // Left face (normal: -1, 0, 0)
+      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}},
+      {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}},
+      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}},
+      {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}},
+      {{-0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}},
+      {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}},
+
+      // Right face (normal: 1, 0, 0)
+      {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0, 1.0}},
+      {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0, 1.0}},
+      {{0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0, 1.0}},
+      {{0.5, 0.5, -0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0, 1.0}},
+      {{0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0, 1.0}},
+      {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0, 1.0}},
+  };
+
+  lightVertexBuffer = metalDevice->newBuffer(lightSource, sizeof(lightSource),
+                                             MTL::ResourceStorageModeShared);
+}
+
+// void MTLEngine::createSquare() {
+//   // We have six vertices to define the square
+//   // This is because our square is made up of two triangles, sharing two
+//   // vertices at the corners.
+//   VertexData squareVertices[] = {
+//       {{-0.5, -0.5, 0.5, 1.0f}, {0.0f, 0.0f}},
+//       {{-0.5, 0.5, 0.5, 1.0f}, {0.0f, 1.0f}},
+//       {{0.5, 0.5, 0.5, 1.0f}, {1.0f, 1.0f}},
+//       {{-0.5, -0.5, 0.5, 1.0f}, {0.0f, 0.0f}},
+//       {{0.5, 0.5, 0.5, 1.0f}, {1.0f, 1.0f}},
+//       {{0.5, -0.5, 0.5, 1.0f}, {1.0f, 0.0f}},
+//   };
+
+//   // Create a buffer for the vertices, defining the size in memory for the
+//   GPU squareVertexBuffer = metalDevice->newBuffer(
+//       &squareVertices, sizeof(squareVertices),
+//       MTL::ResourceStorageModeShared);
+
+//   // Create a grass texture object, pointing to relative file location
+//   grassTexture = new Texture("assets/mc_grass.jpeg", metalDevice);
+// };
+
+// void MTLEngine::createTriangle() {
+//   simd::float3 triangleVertices[] = {
+//       {-0.5f, -0.5f, 0.0f}, {0.5f, -0.5f, 0.0f}, {0.0f, 0.5f, 0.0f}};
+
+//   triangleVertexBuffer =
+//       metalDevice->newBuffer(&triangleVertices, sizeof(triangleVertices),
+//                              MTL::ResourceStorageModeShared);
+// };
+
+// // Function to create a cube, building up from a list of vertices for each
+// face
+// // etc
+// void MTLEngine::createCube() {
+//   // Cube for use in a right-handed coordinate system with triangle faces
+//   // specified in Counter-Clockwise winding order
+//   VertexData cubeVertices[] = {
+//       // Front face (normal: 0, 0, 1)
+//       {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0}},
+//       {{0.5, -0.5, 0.5, 1.0}, {1.0, 0.0}, {0.0, 0.0, 1.0}},
+//       {{0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, 1.0}},
+//       {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, 1.0}},
+//       {{0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, 1.0}},
+//       {{-0.5, 0.5, 0.5, 1.0}, {0.0, 1.0}, {0.0, 0.0, 1.0}},
+
+//       // Back face (normal: 0, 0, -1)
+//       {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0}},
+//       {{-0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}, {0.0, 0.0, -1.0}},
+//       {{-0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, -1.0}},
+//       {{-0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 0.0, -1.0}},
+//       {{0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}, {0.0, 0.0, -1.0}},
+//       {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, 0.0, -1.0}},
+
+//       // Top face (normal: 0, 1, 0)
+//       {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0}},
+//       {{0.5, 0.5, 0.5, 1.0}, {1.0, 0.0}, {0.0, 1.0, 0.0}},
+//       {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 1.0, 0.0}},
+//       {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {0.0, 1.0, 0.0}},
+//       {{-0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}, {0.0, 1.0, 0.0}},
+//       {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}, {0.0, 1.0, 0.0}},
+
+//       // Bottom face (normal: 0, -1, 0)
+//       {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0}},
+//       {{0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}, {0.0, -1.0, 0.0}},
+//       {{0.5, -0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, -1.0, 0.0}},
+//       {{0.5, -0.5, 0.5, 1.0}, {1.0, 1.0}, {0.0, -1.0, 0.0}},
+//       {{-0.5, -0.5, 0.5, 1.0}, {0.0, 1.0}, {0.0, -1.0, 0.0}},
+//       {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {0.0, -1.0, 0.0}},
+
+//       // Left face (normal: -1, 0, 0)
+//       {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0}},
+//       {{-0.5, -0.5, 0.5, 1.0}, {1.0, 0.0}, {-1.0, 0.0, 0.0}},
+//       {{-0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {-1.0, 0.0, 0.0}},
+//       {{-0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}, {-1.0, 0.0, 0.0}},
+//       {{-0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}, {-1.0, 0.0, 0.0}},
+//       {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}, {-1.0, 0.0, 0.0}},
+
+//       // Right face (normal: 1, 0, 0)
+//       {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0}},
+//       {{0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}, {1.0, 0.0, 0.0}},
+//       {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {1.0, 0.0, 0.0}},
+//       {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}, {1.0, 0.0, 0.0}},
+//       {{0.5, 0.5, 0.5, 1.0}, {0.0, 1.0}, {1.0, 0.0, 0.0}},
+//       {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}, {1.0, 0.0, 0.0}},
+//   };
+
+//   cubeVertexBuffer = metalDevice->newBuffer(&cubeVertices,
+//   sizeof(cubeVertices),
+//                                             MTL::ResourceStorageModeShared);
+
+//   grassTexture = new Texture("assets/mc_grass.jpeg", metalDevice);
+// }
+
 void MTLEngine::createBuffers() {
-  transformationBuffer = metalDevice->newBuffer(sizeof(TransformationData),
-                                                MTL::ResourceStorageModeShared);
+  // transformationBuffer = metalDevice->newBuffer(sizeof(TransformationData),
+  // MTL::ResourceStorageModeShared);
+  sphereTransformationBuffer = metalDevice->newBuffer(
+      sizeof(TransformationData), MTL::ResourceStorageModeShared);
+
+  lightTransformationBuffer = metalDevice->newBuffer(
+      sizeof(TransformationData), MTL::ResourceStorageModeShared);
 }
 
 void MTLEngine::createDefaultLibrary() {
@@ -232,16 +350,16 @@ void MTLEngine::createCommandQueue() {
 
 void MTLEngine::createRenderPipeline() {
   MTL::Function *vertexShader = metalDefaultLibrary->newFunction(
-      NS::String::string("cubeVertexShader", NS::ASCIIStringEncoding));
+      NS::String::string("sphereVertexShader", NS::ASCIIStringEncoding));
   assert(vertexShader);
   MTL::Function *fragmentShader = metalDefaultLibrary->newFunction(
-      NS::String::string("cubeFragmentShader", NS::ASCIIStringEncoding));
+      NS::String::string("sphereFragmentShader", NS::ASCIIStringEncoding));
   assert(fragmentShader);
 
   MTL::RenderPipelineDescriptor *renderPipelineDescriptor =
       MTL::RenderPipelineDescriptor::alloc()->init();
-  renderPipelineDescriptor->setLabel(NS::String::string(
-      "Triangle Rendering Pipeline", NS::ASCIIStringEncoding));
+  renderPipelineDescriptor->setLabel(
+      NS::String::string("Sphere Rendering Pipeline", NS::ASCIIStringEncoding));
   renderPipelineDescriptor->setVertexFunction(vertexShader);
   renderPipelineDescriptor->setFragmentFunction(fragmentShader);
   assert(renderPipelineDescriptor);
@@ -252,6 +370,8 @@ void MTLEngine::createRenderPipeline() {
   renderPipelineDescriptor->setSampleCount(sampleCount);
   renderPipelineDescriptor->setDepthAttachmentPixelFormat(
       MTL::PixelFormatDepth32Float);
+  renderPipelineDescriptor->setTessellationOutputWindingOrder(
+      MTL::WindingClockwise);
 
   NS::Error *error;
   metalRenderPS0 =
@@ -270,7 +390,47 @@ void MTLEngine::createRenderPipeline() {
   depthStencilState = metalDevice->newDepthStencilState(depthStencilDescriptor);
 
   renderPipelineDescriptor->release();
-  // depthStencilDescriptor->release();
+  depthStencilDescriptor->release();
+  vertexShader->release();
+  fragmentShader->release();
+};
+
+void MTLEngine::createLightSourceRenderPipeline() {
+  MTL::Function *vertexShader = metalDefaultLibrary->newFunction(
+      NS::String::string("lightVertexShader", NS::ASCIIStringEncoding));
+  assert(vertexShader);
+  MTL::Function *fragmentShader = metalDefaultLibrary->newFunction(
+      NS::String::string("lightFragmentShader", NS::ASCIIStringEncoding));
+  assert(fragmentShader);
+
+  MTL::RenderPipelineDescriptor *renderPipelineDescriptor =
+      MTL::RenderPipelineDescriptor::alloc()->init();
+  renderPipelineDescriptor->setLabel(
+      NS::String::string("Light Rendering Pipeline", NS::ASCIIStringEncoding));
+  renderPipelineDescriptor->setVertexFunction(vertexShader);
+  renderPipelineDescriptor->setFragmentFunction(fragmentShader);
+  assert(renderPipelineDescriptor);
+
+  MTL::PixelFormat pixelFormat = metalLayer->pixelFormat();
+  renderPipelineDescriptor->colorAttachments()->object(0)->setPixelFormat(
+      pixelFormat);
+  renderPipelineDescriptor->setSampleCount(sampleCount);
+  renderPipelineDescriptor->setDepthAttachmentPixelFormat(
+      MTL::PixelFormatDepth32Float);
+  renderPipelineDescriptor->setTessellationOutputWindingOrder(
+      MTL::WindingClockwise);
+
+  NS::Error *error;
+  metalLightSourceRenderPSO =
+      metalDevice->newRenderPipelineState(renderPipelineDescriptor, &error);
+
+  if (metalLightSourceRenderPSO == nil) {
+    std::cout << "Error creating light render pipeline state: " << error
+              << std::endl;
+    std::exit(0);
+  }
+
+  renderPipelineDescriptor->release();
   vertexShader->release();
   fragmentShader->release();
 };
@@ -354,21 +514,24 @@ void MTLEngine::sendRenderCommand() {
 void MTLEngine::encodeRenderCommand(
     MTL::RenderCommandEncoder *renderCommandEncoder) {
 
-  // Moves the cube 2 units down the negative z-axis
-  matrix_float4x4 translationMatrix = matrix4x4_translation(0, 0, -1.0);
+  // Moves the sphere 1 units down the negative z-axis
+  matrix_float4x4 translationMatrix = matrix4x4_translation(0, 0, -1.5);
+  matrix_float4x4 scaleMatrix = matrix4x4_scale(0.5, 0.5, 0.5);
 
-  // Rotate the cube by 90 degrees
+  matrix_float4x4 sizeMatrix = matrix_multiply(translationMatrix, scaleMatrix);
+
+  // Rotate the sphere by 90 degrees
   float angleInDegrees = glfwGetTime() / 2.0 * 45;
   float angleInRadians = angleInDegrees * M_PI / 180.0f;
   matrix_float4x4 rotationMatrix =
       matrix4x4_rotation(angleInRadians, 0.0, 1.0, 0.0);
 
-  matrix_float4x4 modelMatrix = simd_mul(translationMatrix, rotationMatrix);
+  matrix_float4x4 modelMatrix = simd_mul(sizeMatrix, rotationMatrix);
 
   simd::float3 R = simd::float3{1, 0, 0};  // Unit-Right
   simd::float3 U = simd::float3{0, 1, 0};  // Unit-Up
   simd::float3 F = simd::float3{0, 0, -1}; // Unit-Forward
-  simd::float3 P = simd::float3{0, 0, 1};  // Camera Position in World Space
+  simd::float3 P = simd::float3{0, 0, 0};  // Camera Position in World Space
 
   matrix_float4x4 viewMatrix = matrix_make_rows(
       R.x, R.y, R.z, simd::dot(-R, P), U.x, U.y, U.z, simd::dot(-U, P), -F.x,
@@ -388,8 +551,20 @@ void MTLEngine::encodeRenderCommand(
 
   TransformationData transformationData = {modelMatrix, viewMatrix,
                                            perspectiveMatrix};
-  memcpy(transformationBuffer->contents(), &transformationData,
+
+  memcpy(sphereTransformationBuffer->contents(), &transformationData,
          sizeof(transformationData));
+
+  // Sphere Vertex Shader Data
+  simd_float4 lightColor = simd_make_float4(1.0, 1.0, 1.0, 1.0);
+  simd_float4 lightPosition = simd_make_float4(-2.0, 0.5, -1.75, 1.0);
+  simd_float4 cameraPosition = simd_make_float4(P.xyz, 1.0);
+
+  renderCommandEncoder->setFragmentBytes(&lightColor, sizeof(lightColor), 0);
+  renderCommandEncoder->setFragmentBytes(&lightPosition, sizeof(lightPosition),
+                                         1);
+  renderCommandEncoder->setFragmentBytes(&cameraPosition,
+                                         sizeof(cameraPosition), 2);
 
   // Tell what winding mode we are using and instruct metal to cull faces we
   // can't see
@@ -399,11 +574,26 @@ void MTLEngine::encodeRenderCommand(
   // renderCommandEncoder->setTriangleFillMode(MTL::TriangleFillModeLines);
   renderCommandEncoder->setRenderPipelineState(metalRenderPS0);
   renderCommandEncoder->setDepthStencilState(depthStencilState);
-  renderCommandEncoder->setVertexBuffer(cubeVertexBuffer, 0, 0);
-  renderCommandEncoder->setVertexBuffer(transformationBuffer, 0, 1);
+  renderCommandEncoder->setVertexBuffer(sphereVertexBuffer, 0, 0);
+  renderCommandEncoder->setVertexBuffer(sphereTransformationBuffer, 0, 1);
   MTL::PrimitiveType typeTriangle = MTL::PrimitiveTypeTriangle;
-  NS::UInteger vertexStart = 0;
-  NS::UInteger vertexCount = 36;
-  renderCommandEncoder->setFragmentTexture(grassTexture->texture, 0);
-  renderCommandEncoder->drawPrimitives(typeTriangle, vertexStart, vertexCount);
+  renderCommandEncoder->setFragmentTexture(marsTexture->texture, 0);
+  renderCommandEncoder->drawPrimitives(typeTriangle, (NS::UInteger)0,
+                                       vertexCount);
+
+  // Light matrix
+  scaleMatrix = matrix4x4_scale(0.25f, 0.25f, 0.25f);
+  translationMatrix = matrix4x4_translation(lightPosition.xyz);
+  modelMatrix = simd_mul(translationMatrix, scaleMatrix);
+
+  renderCommandEncoder->setRenderPipelineState(metalLightSourceRenderPSO);
+  transformationData = {modelMatrix, viewMatrix, perspectiveMatrix};
+  memcpy(lightTransformationBuffer->contents(), &transformationData,
+         sizeof(transformationData));
+  renderCommandEncoder->setDepthStencilState(depthStencilState);
+  renderCommandEncoder->setVertexBuffer(lightVertexBuffer, 0, 0);
+  renderCommandEncoder->setVertexBuffer(lightTransformationBuffer, 0, 1);
+  renderCommandEncoder->setFragmentBytes(&lightColor, sizeof(lightColor), 0);
+  renderCommandEncoder->drawPrimitives(typeTriangle, (NS::UInteger)0,
+                                       (NS::UInteger)36);
 };

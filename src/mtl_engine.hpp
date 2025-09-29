@@ -33,12 +33,15 @@ private:
   std::string readFile(const std::string &filename);
 
   void createSquare();
+  void createSphere(int numLat = 34, int numLon = 34);
+  void createLight();
   void createTriangle();
   void createCube();
   void createBuffers();
   void createDefaultLibrary();
   void createCommandQueue();
   void createRenderPipeline();
+  void createLightSourceRenderPipeline();
   void createDepthAndMSAATextures();
   void createRenderPassDescriptor();
 
@@ -59,6 +62,7 @@ private:
   MTL::CommandQueue *metalCommandQueue;
   MTL::CommandBuffer *metalCommandBuffer;
   MTL::RenderPipelineState *metalRenderPS0;
+  MTL::RenderPipelineState *metalLightSourceRenderPSO;
 
   MTL::DepthStencilState *depthStencilState;
   MTL::RenderPassDescriptor *renderPassDescriptor;
@@ -66,10 +70,17 @@ private:
   int sampleCount = 4;
   MTL::Texture *depthTexture;
 
+  NS::UInteger vertexCount = 0;
+
   MTL::Buffer *squareVertexBuffer;
+  MTL::Buffer *sphereVertexBuffer;
+  MTL::Buffer *sphereTransformationBuffer;
+  MTL::Buffer *lightVertexBuffer;
+  MTL::Buffer *lightTransformationBuffer;
   MTL::Buffer *triangleVertexBuffer;
   MTL::Buffer *cubeVertexBuffer;
   MTL::Buffer *transformationBuffer;
 
   Texture *grassTexture;
+  Texture *marsTexture;
 };

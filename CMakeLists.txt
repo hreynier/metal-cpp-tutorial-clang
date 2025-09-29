@@ -84,9 +84,11 @@ endfunction()
 
 # Add Metal shader compilation
 add_metal_library(shaders minimal-metal-cpp
-    src/shaders/triangle.metal
-    src/shaders/square.metal
-    src/shaders/cube.metal
+    # src/shaders/triangle.metal
+    # src/shaders/square.metal
+    # src/shaders/cube.metal
+    src/shaders/light.metal
+    src/shaders/sphere.metal
     # Add more .metal files here as needed
 )
 
