@@ -117,6 +117,7 @@ target_include_directories(minimal-metal-cpp
     dependencies/stb
     # AAPLMathUtilities
     dependencies/AAPLMathUtilities
+    dependencies/tiny_obj
 )
 
 target_sources(minimal-metal-cpp
