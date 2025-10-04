@@ -21,7 +21,8 @@ void MTLEngine::init() {
   // createTriangle();
   // createSquare();
   // createCube();
-  createSphere();
+  // createSphere();
+  loadObjModel("assets/dragon.obj");
   createLight();
   createBuffers();
   createDefaultLibrary();
@@ -46,6 +47,7 @@ void MTLEngine::cleanup() {
   glfwTerminate();
   sphereTransformationBuffer->release();
   lightTransformationBuffer->release();
+  objTransformationBuffer->release();
   msaaRenderTargetTexture->release();
   depthTexture->release();
   renderPassDescriptor->release();
@@ -217,6 +219,118 @@ void MTLEngine::createLight() {
                                              MTL::ResourceStorageModeShared);
 }
 
+void MTLEngine::loadObjModel(const char *filename) {
+  tinyobj::attrib_t attrib;
+  std::vector<tinyobj::shape_t> shapes;
+  std::vector<tinyobj::material_t> materials;
+  std::string warn, err;
+
+  // Load the OBJ
+  bool ret =
+      tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename);
+
+  if (!warn.empty()) {
+    std::cout << "Tiny Obj Warning: " << warn << std::endl;
+  }
+
+  if (!err.empty()) {
+    std::cerr << "Tiny Obj Error: " << err << std::endl;
+  }
+
+  if (!ret) {
+    std::cerr << "Failed to load OBJ file: " << filename << std::endl;
+    return;
+  }
+
+  std::vector<VertexData> vertices;
+
+  // Loop through all shapes in the obj
+  for (const auto &shape : shapes) {
+    // Loop through all indices
+    for (const auto &index : shape.mesh.indices) {
+      VertexData vertex;
+
+      // Position
+      vertex.position = {attrib.vertices[3 * index.vertex_index + 0],
+                         attrib.vertices[3 * index.vertex_index + 1],
+                         attrib.vertices[3 * index.vertex_index + 2], 1.0f};
+
+      // Texture (if there)
+      if (index.texcoord_index >= 0) {
+        vertex.textureCoordinate = {
+            attrib.texcoords[2 * index.texcoord_index + 0],
+            1.0f - attrib.texcoords[2 * index.texcoord_index +
+                                    1] // Flip V coordinate
+        };
+      } else {
+        vertex.textureCoordinate = {0.0f, 0.0f};
+      }
+
+      // Normal
+      if (index.normal_index >= 0) {
+        vertex.normal = {
+            attrib.normals[3 * index.normal_index + 0],
+            attrib.normals[3 * index.normal_index + 1],
+            attrib.normals[3 * index.normal_index + 2],
+            0.0f // w=0 for directions
+        };
+      } else {
+        vertex.normal = {0.0f, 0.0f, 0.0f, 0.0f};
+      }
+
+      vertices.push_back(vertex);
+    }
+  }
+  std::cout << "Obj Loaded " << vertices.size() << " vertices from " << filename
+            << std::endl;
+
+  if (vertices.empty()) {
+    std::cerr << "No vertices loaded!" << std::endl;
+    return;
+  }
+
+  // Calculate and print buffer size
+  size_t bufferSize = sizeof(VertexData) * vertices.size();
+  std::cout << "Attempting to create buffer of size: " << bufferSize
+            << " bytes (" << (bufferSize / 1024.0 / 1024.0) << " MB)"
+            << std::endl;
+
+  std::cout << "metalDevice pointer: " << (void *)metalDevice << std::endl;
+
+  // Check if metalDevice is valid
+  if (!metalDevice) {
+    std::cerr << "ERROR: metalDevice is null!" << std::endl;
+    return;
+  }
+
+  std::cout << "metalDevice appears valid" << std::endl;
+
+  if (objVertexBuffer) {
+    std::cout << "releasing old buffer" << std::endl;
+    objVertexBuffer->release();
+  }
+
+  std::cout << "About to call newBuffer..." << std::endl;
+
+  std::cout << "Creating buffer..." << std::endl;
+
+  // Create obj vertex buffer
+  objVertexBuffer =
+      metalDevice->newBuffer(bufferSize, MTL::ResourceStorageModeShared);
+
+  if (!objVertexBuffer) {
+    std::cerr << "Failed to create obj vertex buffer!" << std::endl;
+    return;
+  }
+
+  std::cout << "Buffer created... allocating data..." << std::endl;
+
+  memcpy(objVertexBuffer->contents(), vertices.data(), bufferSize);
+  vertexCount = vertices.size();
+  std::cout << "Buffer created with " << vertexCount << " vertices"
+            << std::endl;
+};
+
 // void MTLEngine::createSquare() {
 //   // We have six vertices to define the square
 //   // This is because our square is made up of two triangles, sharing two
@@ -317,6 +431,9 @@ void MTLEngine::createBuffers() {
   sphereTransformationBuffer = metalDevice->newBuffer(
       sizeof(TransformationData), MTL::ResourceStorageModeShared);
 
+  objTransformationBuffer = metalDevice->newBuffer(
+      sizeof(TransformationData), MTL::ResourceStorageModeShared);
+
   lightTransformationBuffer = metalDevice->newBuffer(
       sizeof(TransformationData), MTL::ResourceStorageModeShared);
 }
@@ -350,16 +467,16 @@ void MTLEngine::createCommandQueue() {
 
 void MTLEngine::createRenderPipeline() {
   MTL::Function *vertexShader = metalDefaultLibrary->newFunction(
-      NS::String::string("sphereVertexShader", NS::ASCIIStringEncoding));
+      NS::String::string("objVertexShader", NS::ASCIIStringEncoding));
   assert(vertexShader);
   MTL::Function *fragmentShader = metalDefaultLibrary->newFunction(
-      NS::String::string("sphereFragmentShader", NS::ASCIIStringEncoding));
+      NS::String::string("objFragmentShader", NS::ASCIIStringEncoding));
   assert(fragmentShader);
 
   MTL::RenderPipelineDescriptor *renderPipelineDescriptor =
       MTL::RenderPipelineDescriptor::alloc()->init();
   renderPipelineDescriptor->setLabel(
-      NS::String::string("Sphere Rendering Pipeline", NS::ASCIIStringEncoding));
+      NS::String::string("Obj Rendering Pipeline", NS::ASCIIStringEncoding));
   renderPipelineDescriptor->setVertexFunction(vertexShader);
   renderPipelineDescriptor->setFragmentFunction(fragmentShader);
   assert(renderPipelineDescriptor);
@@ -496,37 +613,89 @@ void MTLEngine::updateRenderPassDescriptor() {
 void MTLEngine::draw() { sendRenderCommand(); };
 
 void MTLEngine::sendRenderCommand() {
+  std::cout << "=== sendRenderCommand ===" << std::endl;
+
+  if (!metalDrawable) {
+    std::cerr << "ERROR: metalDrawable is NULL!" << std::endl;
+    return;
+  }
+  std::cout << "metalDrawable OK" << std::endl;
+
+  if (!metalCommandQueue) {
+    std::cerr << "ERROR: metalCommandQueue is NULL!" << std::endl;
+    return;
+  }
+  std::cout << "metalCommandQueue OK" << std::endl;
   metalCommandBuffer = metalCommandQueue->commandBuffer();
-
+  if (!metalCommandBuffer) {
+    std::cerr << "ERROR: metalCommandBuffer is NULL!" << std::endl;
+    return;
+  }
+  std::cout << "metalCommandBuffer OK" << std::endl;
   updateRenderPassDescriptor();
-
+  if (!renderPassDescriptor) {
+    std::cerr << "ERROR: renderPassDescriptor is NULL!" << std::endl;
+    return;
+  }
+  std::cout << "renderPassDescriptor OK" << std::endl;
   MTL::RenderCommandEncoder *renderCommandEncoder =
       metalCommandBuffer->renderCommandEncoder(renderPassDescriptor);
+  if (!renderCommandEncoder) {
+    std::cerr << "ERROR: renderCommandEncoder is NULL!" << std::endl;
+    return;
+  }
+  std::cout << "renderCommandEncoder OK" << std::endl;
   encodeRenderCommand(renderCommandEncoder);
+  std::cout << "About to end encoding..." << std::endl;
   renderCommandEncoder->endEncoding();
+  std::cout << "Encoding ended" << std::endl;
 
+  std::cout << "About to present drawable..." << std::endl;
   metalCommandBuffer->presentDrawable(metalDrawable);
+  std::cout << "Drawable presented" << std::endl;
+
+  std::cout << "About to commit..." << std::endl;
   metalCommandBuffer->commit();
+  std::cout << "Committed" << std::endl;
+
+  std::cout << "Waiting for completion..." << std::endl;
   metalCommandBuffer->waitUntilCompleted();
+  std::cout << "Completed!" << std::endl;
 };
 
 // Define the modal, view, perspective projection's here in the render command
 void MTLEngine::encodeRenderCommand(
     MTL::RenderCommandEncoder *renderCommandEncoder) {
+  std::cout << "=== START encodeRenderCommand ===" << std::endl;
+  std::cout << "drawing " << vertexCount << " vertices " << std::endl;
 
-  // Moves the sphere 1 units down the negative z-axis
+  if (!objVertexBuffer) {
+    std::cerr << "ERROR: objVertexBuffer is NULL" << std::endl;
+    return;
+  }
+  std::cout << "objVertexBuffer OK" << std::endl;
+
+  if (!objTransformationBuffer) {
+    std::cerr << "ERROR: objTransformationBuffer is NULL" << std::endl;
+    return;
+  }
+  std::cout << "objTransformationBuffer OK" << std::endl;
+
+  // Moves 1.5  units down the negative z-axis
   matrix_float4x4 translationMatrix = matrix4x4_translation(0, 0, -1.5);
-  matrix_float4x4 scaleMatrix = matrix4x4_scale(0.5, 0.5, 0.5);
+  matrix_float4x4 scaleMatrix = matrix4x4_scale(1.2, 1.2, 1.2);
 
   matrix_float4x4 sizeMatrix = matrix_multiply(translationMatrix, scaleMatrix);
+  std::cout << "Matrices created" << std::endl;
 
   // Rotate the sphere by 90 degrees
-  float angleInDegrees = glfwGetTime() / 2.0 * 45;
+  float angleInDegrees = glfwGetTime() / 4.0 * 45;
   float angleInRadians = angleInDegrees * M_PI / 180.0f;
   matrix_float4x4 rotationMatrix =
       matrix4x4_rotation(angleInRadians, 0.0, 1.0, 0.0);
 
   matrix_float4x4 modelMatrix = simd_mul(sizeMatrix, rotationMatrix);
+  std::cout << "Model matrix calculated" << std::endl;
 
   simd::float3 R = simd::float3{1, 0, 0};  // Unit-Right
   simd::float3 U = simd::float3{0, 1, 0};  // Unit-Up
@@ -536,6 +705,7 @@ void MTLEngine::encodeRenderCommand(
   matrix_float4x4 viewMatrix = matrix_make_rows(
       R.x, R.y, R.z, simd::dot(-R, P), U.x, U.y, U.z, simd::dot(-U, P), -F.x,
       -F.y, -F.z, simd::dot(F, P), 0, 0, 0, 1);
+  std::cout << "View matrix created" << std::endl;
 
   // Get the aspect ratio
   // In the future, we could probably do this in the init and store it such that
@@ -548,40 +718,58 @@ void MTLEngine::encodeRenderCommand(
 
   matrix_float4x4 perspectiveMatrix =
       matrix_perspective_right_hand(fov, aspectRatio, nearZ, farZ);
-
+  std::cout << "Perspective matrix created" << std::endl;
   TransformationData transformationData = {modelMatrix, viewMatrix,
                                            perspectiveMatrix};
 
-  memcpy(sphereTransformationBuffer->contents(), &transformationData,
+  std::cout << "About to memcpy transformation data" << std::endl;
+  memcpy(objTransformationBuffer->contents(), &transformationData,
          sizeof(transformationData));
+  std::cout << "memcpy complete" << std::endl;
 
   // Sphere Vertex Shader Data
   simd_float4 lightColor = simd_make_float4(1.0, 1.0, 1.0, 1.0);
-  simd_float4 lightPosition = simd_make_float4(-2.0, 0.5, -1.75, 1.0);
+  simd_float4 lightPosition = simd_make_float4(-1.0, 0.75, 1.0, 1.0);
   simd_float4 cameraPosition = simd_make_float4(P.xyz, 1.0);
+  simd_float4 objColor = simd_make_float4(0.0f, 0.48f, 0.65f, 1.0f);
 
+  std::cout << "Setting fragment bytes" << std::endl;
   renderCommandEncoder->setFragmentBytes(&lightColor, sizeof(lightColor), 0);
   renderCommandEncoder->setFragmentBytes(&lightPosition, sizeof(lightPosition),
                                          1);
   renderCommandEncoder->setFragmentBytes(&cameraPosition,
                                          sizeof(cameraPosition), 2);
+  renderCommandEncoder->setFragmentBytes(&objColor, sizeof(objColor), 3);
+  std::cout << "FragmentBytes  set" << std::endl;
 
   // Tell what winding mode we are using and instruct metal to cull faces we
   // can't see
+  std::cout << "Setting render states" << std::endl;
   renderCommandEncoder->setFrontFacingWinding(MTL::WindingCounterClockwise);
   renderCommandEncoder->setCullMode(MTL::CullModeBack);
   // Uncomment to show the wireframe of the object we are rendering
   // renderCommandEncoder->setTriangleFillMode(MTL::TriangleFillModeLines);
   renderCommandEncoder->setRenderPipelineState(metalRenderPS0);
   renderCommandEncoder->setDepthStencilState(depthStencilState);
-  renderCommandEncoder->setVertexBuffer(sphereVertexBuffer, 0, 0);
-  renderCommandEncoder->setVertexBuffer(sphereTransformationBuffer, 0, 1);
+  std::cout << "Render states set" << std::endl;
+
+  std::cout << "Setting vertex buffers" << std::endl;
+  renderCommandEncoder->setVertexBuffer(objVertexBuffer, 0, 0);
+  renderCommandEncoder->setVertexBuffer(objTransformationBuffer, 0, 1);
+  std::cout << "Vertex buffers set" << std::endl;
   MTL::PrimitiveType typeTriangle = MTL::PrimitiveTypeTriangle;
-  renderCommandEncoder->setFragmentTexture(marsTexture->texture, 0);
+  if (marsTexture && marsTexture->texture) {
+    std::cout << "Setting fragment texture..." << std::endl;
+    renderCommandEncoder->setFragmentTexture(marsTexture->texture, 0);
+  }
+  std::cout << "About to draw primitives (vertexCount=" << vertexCount << ")"
+            << std::endl;
   renderCommandEncoder->drawPrimitives(typeTriangle, (NS::UInteger)0,
                                        vertexCount);
+  std::cout << "Draw primitives completed" << std::endl;
 
   // Light matrix
+  std::cout << "Drawing light source..." << std::endl;
   scaleMatrix = matrix4x4_scale(0.25f, 0.25f, 0.25f);
   translationMatrix = matrix4x4_translation(lightPosition.xyz);
   modelMatrix = simd_mul(translationMatrix, scaleMatrix);
@@ -596,4 +784,6 @@ void MTLEngine::encodeRenderCommand(
   renderCommandEncoder->setFragmentBytes(&lightColor, sizeof(lightColor), 0);
   renderCommandEncoder->drawPrimitives(typeTriangle, (NS::UInteger)0,
                                        (NS::UInteger)36);
+
+  std::cout << "=== END encodeRenderCommand ===" << std::endl;
 };

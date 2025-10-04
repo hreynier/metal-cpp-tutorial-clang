@@ -15,6 +15,7 @@ add_executable(minimal-metal-cpp
     src/mtl_engine.cpp
     dependencies/stb/stb/stb_image.cpp
     src/texture.cpp
+    src/tiny_obj_implementation.cpp
 )
 
 # Metal Shader Compilation Functions
@@ -89,6 +90,7 @@ add_metal_library(shaders minimal-metal-cpp
     # src/shaders/cube.metal
     src/shaders/light.metal
     src/shaders/sphere.metal
+    src/shaders/obj.metal
     # Add more .metal files here as needed
 )
 

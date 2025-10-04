@@ -7,6 +7,7 @@
 #include <GLFW/glfw3native.h>
 
 #include "texture.hpp"
+#include "tiny_obj_loader.h"
 #include "vertex_data.hpp"
 #include <stb/stb_image.h>
 
@@ -34,6 +35,7 @@ private:
 
   void createSquare();
   void createSphere(int numLat = 34, int numLon = 34);
+  void loadObjModel(const char *filename);
   void createLight();
   void createTriangle();
   void createCube();
@@ -75,6 +77,8 @@ private:
   MTL::Buffer *squareVertexBuffer;
   MTL::Buffer *sphereVertexBuffer;
   MTL::Buffer *sphereTransformationBuffer;
+  MTL::Buffer *objVertexBuffer = nullptr;
+  MTL::Buffer *objTransformationBuffer = nullptr;
   MTL::Buffer *lightVertexBuffer;
   MTL::Buffer *lightTransformationBuffer;
   MTL::Buffer *triangleVertexBuffer;
@@ -82,5 +86,5 @@ private:
   MTL::Buffer *transformationBuffer;
 
   Texture *grassTexture;
-  Texture *marsTexture;
+  Texture *marsTexture = nullptr;
 };
