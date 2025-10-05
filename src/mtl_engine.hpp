@@ -6,10 +6,11 @@
 #define GLFW_EXPOSE_NATIVE_COCOA
 #include <GLFW/glfw3native.h>
 
+#include "stb_image.h"
 #include "texture.hpp"
+#include "tiny_gltf.h"
 #include "tiny_obj_loader.h"
 #include "vertex_data.hpp"
-#include <stb/stb_image.h>
 
 #include <AAPLMathUtilities.h>
 #include <AppKit/AppKit.hpp>

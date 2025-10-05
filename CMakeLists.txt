@@ -117,11 +117,12 @@ target_include_directories(minimal-metal-cpp
     # Apple's AppKit and MetalKit headers for C++ with custom extensions
     dependencies/metal-cpp-extensions
     # STB Image loading library for loading textures
-    dependencies/stb
+    dependencies/stb/stb
     # AAPLMathUtilities
     dependencies/AAPLMathUtilities
     dependencies/tiny_obj
     dependencies/tiny_gltf
+    dependencies/json
 )
 
 target_sources(minimal-metal-cpp

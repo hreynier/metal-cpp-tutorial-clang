@@ -1,6 +1,6 @@
 #pragma once
+#include "stb_image.h"
 #include <Metal/Metal.hpp>
-#include <stb/stb_image.h>
 
 class Texture {
 public:
