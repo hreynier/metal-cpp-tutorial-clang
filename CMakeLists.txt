@@ -16,6 +16,7 @@ add_executable(minimal-metal-cpp
     dependencies/stb/stb/stb_image.cpp
     src/texture.cpp
     src/tiny_obj_implementation.cpp
+    src/tiny_gltf_impl.cpp
 )
 
 # Metal Shader Compilation Functions
@@ -120,6 +121,7 @@ target_include_directories(minimal-metal-cpp
     # AAPLMathUtilities
     dependencies/AAPLMathUtilities
     dependencies/tiny_obj
+    dependencies/tiny_gltf
 )
 
 target_sources(minimal-metal-cpp
