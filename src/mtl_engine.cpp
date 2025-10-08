@@ -22,7 +22,8 @@ void MTLEngine::init() {
   // createSquare();
   // createCube();
   // createSphere();
-  loadObjModel("assets/dragon.obj");
+  // loadObjModel("assets/dragon.obj");
+  loadGltfModel("assets/Avocado.glb");
   createLight();
   createBuffers();
   createDefaultLibrary();
@@ -330,6 +331,183 @@ void MTLEngine::loadObjModel(const char *filename) {
   std::cout << "Buffer created with " << vertexCount << " vertices"
             << std::endl;
 };
+
+void MTLEngine::loadGltfModel(const char *filename) {
+  tinygltf::Model model;
+  tinygltf::TinyGLTF loader;
+  std::string err;
+  std::string warn;
+
+  std::cout << "=== START ===\n"
+            << "Loading GLTF Model from: " << filename << std::endl;
+
+  bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, filename);
+
+  if (!warn.empty()) {
+    std::cout << "Warning: " << warn << std::endl;
+  }
+
+  if (!err.empty()) {
+    std::cerr << "Error: " << err << std::endl;
+    return;
+  }
+
+  if (!ret) {
+    std::cerr << "Error: loading binary from file" << std::endl;
+    return;
+  }
+  std::vector<VertexData> vertices;
+
+  // Iterate through all meshes
+  for (const auto &mesh : model.meshes) {
+    std::cout << "Processing mesh: " << mesh.name << std::endl;
+
+    // Each mesh has primitives (submeshes)
+    for (const auto &primitive : mesh.primitives) {
+
+      // Get the accessors for position, normal, texcoord
+      const tinygltf::Accessor &posAccessor =
+          model.accessors[primitive.attributes.at("POSITION")];
+      const tinygltf::BufferView &posView =
+          model.bufferViews[posAccessor.bufferView];
+      const tinygltf::Buffer &posBuffer = model.buffers[posView.buffer];
+
+      // Get stride – if 0, data is tightly packed
+      int posStride = posAccessor.ByteStride(posView);
+      if (posStride == 0) {
+        posStride =
+            tinygltf::GetComponentSizeInBytes(posAccessor.componentType) *
+            tinygltf::GetNumComponentsInType(posAccessor.type);
+      }
+
+      const unsigned char *posData =
+          posBuffer.data.data() + posView.byteOffset + posAccessor.byteOffset;
+
+      const float *positions = reinterpret_cast<const float *>(
+          &posBuffer.data[posView.byteOffset + posAccessor.byteOffset]);
+
+      // Get normals if they exist
+      const float *normals = nullptr;
+      if (primitive.attributes.find("NORMAL") != primitive.attributes.end()) {
+        const tinygltf::Accessor &normAccessor =
+            model.accessors[primitive.attributes.at("NORMAL")];
+        const tinygltf::BufferView &normView =
+            model.bufferViews[normAccessor.bufferView];
+        const tinygltf::Buffer &normBuffer = model.buffers[normView.buffer];
+        normals = reinterpret_cast<const float *>(
+            &normBuffer.data[normView.byteOffset + normAccessor.byteOffset]);
+      }
+
+      // Get texture coordinates if they exist
+      const float *texCoords = nullptr;
+      if (primitive.attributes.find("TEXCOORD_0") !=
+          primitive.attributes.end()) {
+        const tinygltf::Accessor &texAccessor =
+            model.accessors[primitive.attributes.at("TEXCOORD_0")];
+        const tinygltf::BufferView &texView =
+            model.bufferViews[texAccessor.bufferView];
+        const tinygltf::Buffer &texBuffer = model.buffers[texView.buffer];
+        texCoords = reinterpret_cast<const float *>(
+            &texBuffer.data[texView.byteOffset + texAccessor.byteOffset]);
+      }
+
+      // Handle indices
+      if (primitive.indices >= 0) {
+        // Indexed mesh
+        const tinygltf::Accessor &indexAccessor =
+            model.accessors[primitive.indices];
+        const tinygltf::BufferView &indexView =
+            model.bufferViews[indexAccessor.bufferView];
+        const tinygltf::Buffer &indexBuffer = model.buffers[indexView.buffer];
+
+        for (size_t i = 0; i < indexAccessor.count; i++) {
+          uint32_t index;
+
+          // Indices can be uint16 or uint32
+          if (indexAccessor.componentType ==
+              TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+            const uint16_t *indices = reinterpret_cast<const uint16_t *>(
+                &indexBuffer
+                     .data[indexView.byteOffset + indexAccessor.byteOffset]);
+            index = indices[i];
+          } else {
+            const uint32_t *indices = reinterpret_cast<const uint32_t *>(
+                &indexBuffer
+                     .data[indexView.byteOffset + indexAccessor.byteOffset]);
+            index = indices[i];
+          }
+
+          VertexData vertex;
+          vertex.position = {positions[index * 3 + 0], positions[index * 3 + 1],
+                             positions[index * 3 + 2], 1.0f};
+
+          if (normals) {
+            vertex.normal = {normals[index * 3 + 0], normals[index * 3 + 1],
+                             normals[index * 3 + 2], 0.0f};
+          } else {
+            vertex.normal = {0.0f, 1.0f, 0.0f, 0.0f};
+          }
+
+          if (texCoords) {
+            vertex.textureCoordinate = {texCoords[index * 2 + 0],
+                                        texCoords[index * 2 + 1]};
+          } else {
+            vertex.textureCoordinate = {0.0f, 0.0f};
+          }
+
+          vertices.push_back(vertex);
+        }
+      } else {
+        // Non-indexed mesh
+        for (size_t i = 0; i < posAccessor.count; i++) {
+          VertexData vertex;
+          vertex.position = {positions[i * 3 + 0], positions[i * 3 + 1],
+                             positions[i * 3 + 2], 1.0f};
+
+          if (normals) {
+            vertex.normal = {normals[i * 3 + 0], normals[i * 3 + 1],
+                             normals[i * 3 + 2], 0.0f};
+          } else {
+            vertex.normal = {0.0f, 1.0f, 0.0f, 0.0f};
+          }
+
+          if (texCoords) {
+            vertex.textureCoordinate = {texCoords[i * 2 + 0],
+                                        texCoords[i * 2 + 1]};
+          } else {
+            vertex.textureCoordinate = {0.0f, 0.0f};
+          }
+
+          vertices.push_back(vertex);
+        }
+      }
+    }
+  }
+
+  std::cout << "Loaded " << vertices.size() << " vertices from glTF"
+            << std::endl;
+
+  if (vertices.empty()) {
+    std::cerr << "No vertices loaded!" << std::endl;
+    return;
+  }
+
+  // Create buffer (same as OBJ loader)
+  size_t bufferSize = sizeof(VertexData) * vertices.size();
+  objVertexBuffer =
+      metalDevice->newBuffer(bufferSize, MTL::ResourceStorageModeShared);
+
+  if (!objVertexBuffer) {
+    std::cerr << "Failed to create vertex buffer!" << std::endl;
+    return;
+  }
+
+  memcpy(objVertexBuffer->contents(), vertices.data(), bufferSize);
+  vertexCount = vertices.size();
+
+  std::cout << "Buffer created with " << vertexCount << " vertices"
+            << std::endl;
+}
 
 // void MTLEngine::createSquare() {
 //   // We have six vertices to define the square
@@ -683,13 +861,13 @@ void MTLEngine::encodeRenderCommand(
 
   // Moves 1.5  units down the negative z-axis
   matrix_float4x4 translationMatrix = matrix4x4_translation(0, 0, -1.5);
-  matrix_float4x4 scaleMatrix = matrix4x4_scale(1.2, 1.2, 1.2);
+  matrix_float4x4 scaleMatrix = matrix4x4_scale(3.0, 3.0, 3.0);
 
   matrix_float4x4 sizeMatrix = matrix_multiply(translationMatrix, scaleMatrix);
   std::cout << "Matrices created" << std::endl;
 
   // Rotate the sphere by 90 degrees
-  float angleInDegrees = glfwGetTime() / 4.0 * 45;
+  float angleInDegrees = glfwGetTime() / 1.0 * 45;
   float angleInRadians = angleInDegrees * M_PI / 180.0f;
   matrix_float4x4 rotationMatrix =
       matrix4x4_rotation(angleInRadians, 0.0, 1.0, 0.0);

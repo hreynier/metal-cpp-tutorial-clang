@@ -37,6 +37,7 @@ private:
   void createSquare();
   void createSphere(int numLat = 34, int numLon = 34);
   void loadObjModel(const char *filename);
+  void loadGltfModel(const char *filename);
   void createLight();
   void createTriangle();
   void createCube();
