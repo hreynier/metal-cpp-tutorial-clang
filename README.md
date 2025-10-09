@@ -49,13 +49,7 @@ src/
 
 ## Tag Versions
 
-lesson-01
-lesson-02-1
-lesson02-02-blinn-phong
-lesson02-02-phong
-lesson02-03-gltf
-lesson02-03-mars
-lesson02-03-obj
+Checkout the different tag versions below to target different lesson solutions from the tutorial series
 
 ### Lesson 01 – Simple textured square
 
