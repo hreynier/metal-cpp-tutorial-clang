@@ -61,40 +61,40 @@ lesson02-03-obj
 
 `git checkout lesson-01 && ./build.sh run`
 
-[Square Image](./docs/Lesson01.png)
+![Square Image](./docs/Lesson01.png)
 
 ### Lesson 02 Part 1 – Simple 3D textured Cube
 
 `git checkout lesson-02-1 && ./build.sh run`
 
-[Rotating 3D Cube](./docs/lesson02.gif)
+![Rotating 3D Cube](./docs/lesson02.gif)
 
 ### Lesson 02 Part 2 – 3D Textured Cube with Phong shading
 
 `git checkout lesson02-02-phong && ./build.sh run`
 
-[Phong shaded cube](./docs/lesson02-phong.gif)
+![Phong shaded cube](./docs/Lesson02-phong.gif)
 
 ### Lesson 02 Part 3 – 3D Textured Cube with Blinn-Phong shading
 
 `git checkout lesson02-02-blinn-phong && ./build.sh run`
 
-[Blinn-Phong shaded cube](./docs/lesson02-blinn-phong.gif)
+![Blinn-Phong shaded cube](./docs/Lesson02-blinn-phong.gif)
 
 ### Lesson 02 Part 4 – Blinn-Phong Sphere with lighting source
 
 `git checkout lesson02-03-mars && ./build.sh run`
 
-[Mars](./docs/mars.gif)
+![Mars](./docs/mars.gif)
 
 ### Lesson 03 - Loading a .obj model
 
 `git checkout lesson02-03-obj && ./build.sh run`
 
-[Dragon](./docs/dragon.gif)
+![Dragon](./docs/dragon.gif)
 
 ### Lesson 03 - Loading a .gltf model
 
 `git checkout lesson02-03-gltf && ./build.sh run`
 
-[Avocado](./docs/avocado.gif)
+![Avocado](./docs/avocado.gif)
